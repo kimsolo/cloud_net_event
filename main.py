@@ -89,7 +89,10 @@ class STN3d(nn.Module):
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 10)
         self.relu = nn.ReLU()
-
+        
+        self.dropout1 = nn.Dropout(p=0.2)
+        self.dropout2 = nn.Dropout(p=0.2)
+        
         self.bn1 = nn.BatchNorm1d(64)
         self.bn2 = nn.BatchNorm1d(128)
         self.bn3 = nn.BatchNorm1d(1024)
@@ -106,7 +109,9 @@ class STN3d(nn.Module):
         x = x.view(-1, 1024)
 
         x = F.relu(self.bn4(self.fc1(x)))
+        x = self.dropout1(x)
         x = F.relu(self.bn5(self.fc2(x)))
+        x = self.dropout2(x)
         x = self.fc3(x)
 
         # iden = Variable(torch.from_numpy(np.array([1,0,0,0,1,0,0,0,1]).astype(np.float32))).view(1,9).repeat(batchsize,1)
