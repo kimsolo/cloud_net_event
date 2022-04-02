@@ -1,6 +1,7 @@
 .vscode/
 .DS_Store
 *.pyc
+*.pt
 data/
 notebook/
 *.sh
