@@ -32,6 +32,27 @@ parser.add_argument('-N', '--epoch', default=100, type=int, help='训练epoch，
 from torch.autograd import Variable
 
 
+def event_aug(input_array):
+    if np.random.randn() < 0.5:
+        sigma = 1
+        input_array += torch.abs(sigma * torch.randn(input_array.shape))
+    idx = np.arange(input_array.shape[1])
+    
+    if np.random.randn() < 0.5:        
+        np.random.shuffle(idx)
+        
+    if np.random.randn() < 0.5:        
+        input_array[0,:] = input_array[0,:].max() - input_array[0,:]
+        
+    # if np.random.randn() < 0.5:        
+    #     input_array[:,1,:] = input_array[:,1,:].max() - input_array[:,1,:]
+    # if np.random.randn(1) < 0.5:
+    #     input_array[:,0,:] = 27 - input_array[:,0,:]
+        # input_array[:,1,:]
+    # choose = np.random.randint(1024, 2048)
+    # input_array[:,:,1024 : choose] = 0
+    return input_array[:,idx]
+
 class Dataset(BaseDataset):
     """
     For time-base evnet data
@@ -42,17 +63,49 @@ class Dataset(BaseDataset):
         self, 
         images_dir,
         train_mode,
+        aug = True,
+        cache = True,
         # event_set,
     ):
         # ids = os.listdir(images_dir)
         self.images_dir = images_dir
-        event_set = NMNIST(images_dir, train=train_mode, data_type='event')
+        self.event_set = NMNIST(images_dir, train=train_mode, data_type='event')
          # event, label = event_set[0]
         self.input = []
         self.label = []
+        self.aug = aug
+        self.cache = cache
+        # rotation_matrix = np.array([[cosval, 0, sinval],
+        #                             [0, 1, 0],
+        #                             [-sinval, 0, cosval]])
+        if self.cache:
+            for i in tqdm(range(len(self.event_set))):
+                event, label = self.event_set[i]
+                len_data = len(event['t'])
+                input_array = np.zeros([3, 2048], np.float)
+                if len_data > 2048:
+                    input_array[0, 0:len_data] = event['x'][0:2048]
+                    input_array[1, 0:len_data] = event['y'][0:2048]
+                    input_array[2, 0:len_data] = event['t'][0:2048] / 1000 # to ms
+                # input_array
+                else:
+                    input_array[0, 0:len_data] = event['x'][0:len_data]
+                    input_array[1, 0:len_data] = event['y'][0:len_data]
+                    input_array[2, 0:len_data] = event['t'][0:len_data] / 1000 # to ms
+                self.input.append(input_array)
+                self.label.append(label)
+    def __getitem__(self, i):
+        # read data
+        # image = cv2.imread(self.images_fps[i])
         
-        for i in tqdm(range(len(event_set))):
-            event, label = event_set[i]
+        # for k in event.keys():
+        #     print(k, event[k])
+
+        if self.cache:
+            input_tensor= torch.Tensor(self.input[i])
+            label = torch.Tensor(self.label[i])
+        else:
+            event, label = self.event_set[i]
             len_data = len(event['t'])
             input_array = np.zeros([3, 2048], np.float)
             if len_data > 2048:
@@ -64,17 +117,12 @@ class Dataset(BaseDataset):
                 input_array[0, 0:len_data] = event['x'][0:len_data]
                 input_array[1, 0:len_data] = event['y'][0:len_data]
                 input_array[2, 0:len_data] = event['t'][0:len_data] / 1000 # to ms
-            self.input.append(input_array)
-            self.label.append(label)
-    def __getitem__(self, i):
-        # read data
-        # image = cv2.imread(self.images_fps[i])
-        
-        # for k in event.keys():
-        #     print(k, event[k])
-
-        input_tensor= torch.Tensor(self.input[i])
-        return input_tensor, torch.tensor(self.label[i])
+                
+            input_tensor= torch.Tensor(input_array)
+            label = torch.tensor(self.label[i])
+        if self.aug:
+            input_tensor = event_aug(input_tensor)
+        return input_tensor, label
     
     def __len__(self):
         return len(self.input)
@@ -127,12 +175,6 @@ def format_logs(logs):
     str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items()]
     s = ', '.join(str_logs)
     return s
-
-
-def event_aug(input_array):
-    choose = np.random.randint(1024, 2048)
-    input_array[:,:,1024 : choose] = 0
-    return input_array
 
 
 def main():
@@ -204,7 +246,7 @@ def main():
             for img, label in iterator:
                 img = img.to(device)
                 label = label.to(device)
-                img = event_aug(img)
+                # img = event_aug(img)
                 # label_one_hot = F.one_hot(label, 10).float()
                 # label_one_hot = F.one_hot(label, 10)
                 # img = F.dropout(img, p = 0.2) * 0.8
@@ -258,7 +300,7 @@ def main():
             test_accs.append(test_accuracy)
             max_test_accuracy = max(max_test_accuracy, test_accuracy)
         print("Epoch {}: train_acc = {}, test_acc={}, max_test_acc={}, train_times={}".format(epoch, train_accuracy, test_accuracy, max_test_accuracy, train_times))
-        print()
+        # print()
     
     # 保存模型
     torch.save(net, model_output_dir + "/n_mnist.pt")
