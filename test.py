@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Apr  2 09:59:59 2022
+
+@author: cyp
+"""
+
 import argparse
 import torch
 import torch.nn as nn
@@ -12,51 +19,40 @@ from spikingjelly.datasets import pad_sequence_collate, padded_sequence_mask
 from spikingjelly.datasets.n_mnist import NMNIST
 from torch.utils.data import Dataset as BaseDataset
 from torch.utils.data import DataLoader
+from torch.autograd import Variable
 import os
 import sys
 
-parser = argparse.ArgumentParser(description='spikingjelly LIF MNIST Training')
 
+parser = argparse.ArgumentParser(description='spikingjelly LIF MNIST Training')
 parser.add_argument('--device', default='cuda:0', help='运行的设备，例如“cpu”或“cuda:0”\n Device, e.g., "cpu" or "cuda:0"')
 
-parser.add_argument('--dataset_dir', default='./', help='保存MNIST数据集的位置，例如“./”\n Root directory for saving MNIST dataset, e.g., "./"')
-parser.add_argument('--log_dir', default='./result', help='the path of sving result')
-parser.add_argument('--model-output-dir', default='./result', help='模型保存路径，例如“./”\n Model directory for saving, e.g., "./"')
-
-parser.add_argument('--load_dir', default='./result/exp1/n_mnist.pt', help='load model path')
+parser.add_argument('--dataset-dir', default='./', help='保存MNIST数据集的位置，例如“./”\n Root directory for saving MNIST dataset, e.g., "./"')
+parser.add_argument('--log-dir', default='./result', help='保存tensorboard日志文件的位置，例如“./”\n Root directory for saving tensorboard logs, e.g., "./"')
+parser.add_argument('--model-output-dir', default='./', help='模型保存路径，例如“./”\n Model directory for saving, e.g., "./"')
 
 parser.add_argument('-b', '--batch-size', default=160, type=int, help='Batch 大小，例如“64”\n Batch size, e.g., "64"')
 parser.add_argument('-T', '--timesteps', default=100, type=int, dest='T', help='仿真时长，例如“100”\n Simulating timesteps, e.g., "100"')
-parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float, metavar='LR', help='学习率，例如“1e-3”\n Learning rate, e.g., "1e-3": ', dest='lr')
-# parser.add_argument('--tau', default=2.0, type=float, help='LIF神经元的时间常数tau，例如“100.0”\n Membrane time constant, tau, for LIF neurons, e.g., "100.0"')
+parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', help='学习率，例如“1e-3”\n Learning rate, e.g., "1e-3": ', dest='lr')
+parser.add_argument('--tau', default=2.0, type=float, help='LIF神经元的时间常数tau，例如“100.0”\n Membrane time constant, tau, for LIF neurons, e.g., "100.0"')
 parser.add_argument('-N', '--epoch', default=300, type=int, help='训练epoch，例如“100”\n Training epoch, e.g., "100"')
-
-
-
-from torch.autograd import Variable
 
 
 def event_aug(input_array):
     if np.random.randn() < 0.5:
         sigma = 1
-        input_array += torch.abs(sigma * torch.randn(input_array.shape).int())
+        input_array += torch.abs(sigma * torch.randn(input_array.shape))
     idx = np.arange(input_array.shape[1])
     
     # if np.random.randn() < 0.5:        
     np.random.shuffle(idx)
     
-    if np.random.randn() < 0.5:     
-        x_pad = np.random.randint(-4, 4)
-        y_pad = np.random.randint(-4, 4)
-        input_array[0,:] += x_pad
-        input_array[1,:] += y_pad
-        input_array[0,:][input_array[0,:] < 0] = np.random.randint(0, 34)
-        
-        input_array[1,:][input_array[1,:] < 0] = np.random.randint(0, 34)
-        
-        input_array[0,:][input_array[0,:] > 33] = np.random.randint(0, 34)
-        
-        input_array[1,:][input_array[1,:] > 33] = np.random.randint(0, 34)
+    # if np.random.randn() < 0.5:     
+    #     x_pad = np.random.randint(-5, 5)
+    #     y_pad = np.random.randint(-5, 5)
+    #     input_array[0,:] += x_pad
+    #     input_array[1,:] += y_pad
+    #     # input_array[input_array[0,:] < 34][0,:] = 
     
     # if np.random.randn() < 0.5:        
     #     input_array[0,:] = input_array[0,:].max() - input_array[0,:]
@@ -67,9 +63,9 @@ def event_aug(input_array):
         # input_array[:,1,:]
     # choose = np.random.randint(1024, 2048)
     # input_array[:,:,1024 : choose] = 0
-    input_array[0,:] / 34  # normallize ratio
-    input_array[1,:] / 34  # normallize ratio
-    input_array[2,:] / 316  # normallize ratio
+    input_array[0,:] / 33
+    input_array[1,:] / 33
+    input_array[2,:] / 150
     return input_array[:,idx]
 
 class Dataset(BaseDataset):
@@ -97,7 +93,6 @@ class Dataset(BaseDataset):
         # rotation_matrix = np.array([[cosval, 0, sinval],
         #                             [0, 1, 0],
         #                             [-sinval, 0, cosval]])
-        # max_size = 0
         if self.cache:
             for i in tqdm(range(len(self.event_set))):
                 event, label = self.event_set[i]
@@ -107,17 +102,11 @@ class Dataset(BaseDataset):
                     input_array[0, 0:len_data] = event['x'][0:2048]
                     input_array[1, 0:len_data] = event['y'][0:2048]
                     input_array[2, 0:len_data] = event['t'][0:2048] / 1000 # to ms
-                #     if event['t'][0:2048].max() > max_size:
-                #         max_size = event['t'][0:2048].max()
-                #         print(event['t'][0:2048].max())
-                # # input_array
+                # input_array
                 else:
                     input_array[0, 0:len_data] = event['x'][0:len_data]
                     input_array[1, 0:len_data] = event['y'][0:len_data]
                     input_array[2, 0:len_data] = event['t'][0:len_data] / 1000 # to ms
-                    # if event['t'][0:len_data].max() > max_size:
-                    #     max_size = event['t'][0:len_data].max()
-                    #     print(event['t'][0:len_data].max())
                 self.input.append(input_array)
                 self.label.append(label)
     def __getitem__(self, i):
@@ -206,18 +195,28 @@ def format_logs(logs):
 def main():
     '''
     :return: None
-   
+
+    * :ref:`API in English <lif_fc_mnist.main-en>`
+
+    .. _lif_fc_mnist.main-cn:
+
+    使用全连接-LIF的网络结构，进行MNIST识别。\n
+    这个函数会初始化网络进行训练，并显示训练过程中在测试集的正确率。
+
+    * :ref:`中文API <lif_fc_mnist.main-cn>`
+
+    .. _lif_fc_mnist.main-en:
+
+    The network with FC-LIF structure for classifying MNIST.\n
+    This function initials the network, starts trainingand shows accuracy on test dataset.
     '''
     args = parser.parse_args()
     root_dir = 'E:/BaiduNetdiskDownload/N-MNIST/'
-    save_dir = args.log_dir
-    list_dirs = os.listdir(save_dir)
-    result_dir = os.path.join(save_dir, 'exp' + str(len(list_dirs)))
-    os.mkdir(result_dir)
+   
     train_dataset = Dataset(root_dir, True)
     valid_dataset = Dataset(root_dir, False)
     
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, pin_memory=True, drop_last=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=3, pin_memory=True, drop_last=True)
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size * 2, shuffle=False, num_workers=2, pin_memory=True, drop_last=True)
     
     temp_data = train_dataset[4]
@@ -234,7 +233,7 @@ def main():
     batch_size = args.batch_size 
     lr = args.lr
     T = args.T
-    # tau = args.tau
+    tau = args.tau
     train_epoch = args.epoch
 
     writer = SummaryWriter(log_dir)
@@ -278,6 +277,7 @@ def main():
                 optimizer.step()
                 scheduler.step()
     
+                # 正确率的计算方法如下。认为输出层中脉冲发放频率最大的神经元的下标i是分类结果
                 train_correct_sum += (output.max(1)[1] == label.to(device)).float().sum().item()
                 train_sum += label.numel()
     
@@ -314,9 +314,6 @@ def main():
             test_accuracy = test_correct_sum / test_sum
             writer.add_scalar('test_accuracy', test_accuracy, epoch)
             test_accs.append(test_accuracy)
-            if test_accuracy >= max_test_accuracy:
-                torch.save(net.state_dict(), os.path.join(result_dir, str(round(test_accuracy, 5)) + '_best.pth'))
-                print('Model saved!')
             max_test_accuracy = max(max_test_accuracy, test_accuracy)
         print("Epoch {}: train_acc = {}, test_acc={}, max_test_acc={}, train_times={}".format(epoch, train_accuracy, test_accuracy, max_test_accuracy, train_times))
         # print()
