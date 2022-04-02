@@ -27,7 +27,7 @@ parser.add_argument('-b', '--batch-size', default=160, type=int, help='Batch 大
 parser.add_argument('-T', '--timesteps', default=100, type=int, dest='T', help='仿真时长，例如“100”\n Simulating timesteps, e.g., "100"')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', help='学习率，例如“1e-3”\n Learning rate, e.g., "1e-3": ', dest='lr')
 parser.add_argument('--tau', default=2.0, type=float, help='LIF神经元的时间常数tau，例如“100.0”\n Membrane time constant, tau, for LIF neurons, e.g., "100.0"')
-parser.add_argument('-N', '--epoch', default=100, type=int, help='训练epoch，例如“100”\n Training epoch, e.g., "100"')
+parser.add_argument('-N', '--epoch', default=300, type=int, help='训练epoch，例如“100”\n Training epoch, e.g., "100"')
 
 from torch.autograd import Variable
 
@@ -103,7 +103,7 @@ class Dataset(BaseDataset):
 
         if self.cache:
             input_tensor= torch.Tensor(self.input[i])
-            label = torch.Tensor(self.label[i])
+            label = torch.tensor(self.label[i])
         else:
             event, label = self.event_set[i]
             len_data = len(event['t'])
@@ -228,6 +228,7 @@ def main():
     net = net.cuda()
     # 使用Adam优化器
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=0, T_max=train_epoch)
     # 使用泊松编码器
     encoder = encoding.PoissonEncoder()
     train_times = 0
@@ -252,14 +253,14 @@ def main():
                 # img = F.dropout(img, p = 0.2) * 0.8
                 optimizer.zero_grad()
     
-    
+                
                 output = net(img)
     
                 # loss = F.mse_loss(output, label_one_hot)
                 loss = loss_ce(output, label)
                 loss.backward()
                 optimizer.step()
-                
+                scheduler.step()
     
                 # 正确率的计算方法如下。认为输出层中脉冲发放频率最大的神经元的下标i是分类结果
                 train_correct_sum += (output.max(1)[1] == label.to(device)).float().sum().item()
