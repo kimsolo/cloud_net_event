@@ -154,7 +154,7 @@ class STN3d(nn.Module):
         self.fc3 = nn.Linear(256, 10)
         self.relu = nn.ReLU()
         
-        self.dropout1 = nn.Dropout(p=0.2)
+        self.dropout1 = nn.Dropout(p=0.4)
         self.dropout2 = nn.Dropout(p=0.2)
         
         self.bn1 = nn.BatchNorm1d(64)
@@ -173,8 +173,8 @@ class STN3d(nn.Module):
         x = x.view(-1, 1024)
 
         x = F.relu(self.bn4(self.fc1(x)))
-        x = self.dropout1(x)
-        x = F.relu(self.bn5(self.fc2(x)))
+        # x = self.dropout1(x)
+        x = F.relu(self.bn5(self.dropout1(self.fc2(x))))
         
         x = self.fc3(x)
 
